@@ -1,0 +1,90 @@
+---
+title: "machineLearningProject3"
+author: "Alexander Reyes"
+date: "November 14, 2014"
+output: html_document
+---
+
+
+```{r loading_data}
+library(caret)
+dat <- read.csv('pml-training.csv')
+colNames <- names(dat)
+measuredVars<- grep('dumbbell|arm|belt|glove', colNames)
+
+factorVars <- grep('factor', sapply(dat, class))
+factorCandidates <- colNames[c(-(1:7), -factorVars)]
+
+preObj <- preProcess(dat[, factorCandidates],method=c("knnImpute"))
+processedFactorCandidates <- predict(preObj, dat[, factorCandidates])
+finalData <- data.frame(processedFactorCandidates, classe=dat[, 'classe'])
+```
+
+The difficulty with data set is the number of possible predictors and the fact that many are read as 'factors'.  The latter group seems to have a lot of NA's admixed with some strings which causes read.csv to fail is numeric types are enforced.  Factor variables cause problems with preprocessing so I tried to not consider them as there were so many NA's anyway.  This left the "factorCandidates" vector as the variables to be considered in the model.
+
+knnImpute was used to fill in NA's in the factorCandidates.  I used p=0.3 to save time on the training for the knit html call.
+
+Models were fitted for simple tree('rpart'),  random forest ('rf') and boosted trees ('gbm')
+
+```{r data_slicing}
+
+inTrain <- createDataPartition(y=finalData$classe, p=0.3, list=FALSE)
+training <- finalData[inTrain, ]
+testing <- finalData[-inTrain, ]
+rm(dat)
+
+```
+
+
+```{r rpart}
+model.rpart <- train(classe ~ ., method='rpart', data=training)
+```
+
+```{r gbm, results='hide'}
+model.gbm <- train(classe ~ ., method='gbm', data=training)
+
+```
+
+```{r rf}
+model.rf <- train(classe ~ ., method='rf', data=training)
+```
+
+
+
+
+```{r choosing}
+pred.rpart <- predict(model.rpart, testing)
+pred.rf <- predict(model.rf, testing)
+pred.gbm <- predict(model.gbm, testing)
+
+
+conf.rpart <- confusionMatrix(pred.rpart, testing$classe)
+conf.rf <- confusionMatrix(pred.rf, testing$classe)
+conf.gbm <- confusionMatrix(pred.gbm, testing$classe)
+
+
+#Accuracy and Kappa values for the 3 models
+#rpart
+conf.rpart$overall['Accuracy']
+conf.rpart$overall['Kappa']
+#rf
+conf.rf$overall['Accuracy']
+conf.rf$overall['Kappa']
+#gbm
+conf.gbm$overall['Accuracy']
+conf.gbm$overall['Kappa']
+
+
+```
+
+
+So accuracy even disregarding the 'factor' variables was quite good with random forest topping with accuracy at  0.9891249 and Kappa at 0.9862439 on the testing set when I used p=0.7 on createDataPartition call.  It was enough to get the programming assignment right.  Here I just used p=0.2 because it was just taking too long when I tried to knit html so the accuracy and Kappa may be different.  We now proceed to plot top 30 most important variables for gbm and rf.  The lists are more or less similar.
+
+
+```{r final}
+gbmImp <- varImp(model.gbm)
+plot(gbmImp, top=20, main="Variable importance for gbm")
+
+rfImp<- varImp(model.rf)
+plot(rfImp, top=20, main="Variable importance for rf")
+```
